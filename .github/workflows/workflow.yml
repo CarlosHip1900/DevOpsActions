@@ -63,15 +63,19 @@ jobs:
 
       - name: Build Docker image
         run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
           docker build \
-            -t ghcr.io/${{ github.repository_owner }}/devopsactions:latest \
-            -t ghcr.io/${{ github.repository_owner }}/devopsactions:${{ github.sha }} \
+            -t ghcr.io/$OWNER/devopsactions:latest \
+            -t ghcr.io/$OWNER/devopsactions:${{ github.sha }} \
             .
 
       - name: Push Docker image
         run: |
-          docker push ghcr.io/${{ github.repository_owner }}/devopsactions:latest
-          docker push ghcr.io/${{ github.repository_owner }}/devopsactions:${{ github.sha }}
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          docker push ghcr.io/$OWNER/devopsactions:latest
+          docker push ghcr.io/$OWNER/devopsactions:${{ github.sha }}
 
 
   deploy:
@@ -88,13 +92,17 @@ jobs:
 
       - name: Pull Docker image
         run: |
-          docker pull ghcr.io/${{ github.repository_owner }}/devopsactions:latest
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          docker pull ghcr.io/$OWNER/devopsactions:latest
 
       - name: Run Docker container
         run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
           docker run \
             --name DevOpsActions \
-            ghcr.io/${{ github.repository_owner }}/devopsactions:latest
+            ghcr.io/$OWNER/devopsactions:latest
 
       - name: Check container
         run: docker ps -a
