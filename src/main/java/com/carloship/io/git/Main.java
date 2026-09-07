@@ -35,8 +35,10 @@ public class Main {
 
         AtomicInteger integer = new AtomicInteger();
 
-        for (int i = 0; i < 15; i++) {
-            cls.add(CompletableFuture.runAsync(() -> System.out.println("[LIST] Adding and Get " + integer.getAndIncrement())));
+        for (var anon = new Object() {
+            int i = 0;
+        }; anon.i < 15; anon.i++) {
+            cls.add(CompletableFuture.runAsync(() -> System.out.println("[LIST] [" + anon.i + "] Adding and Get " + integer.getAndIncrement())));
         }
 
         CompletableFuture.allOf(cls.toArray(new CompletableFuture[0])).thenRun(() -> {
