@@ -24,6 +24,9 @@ jobs:
           distribution: temurin
           java-version: '26'
 
+      - name: Can execute Gradle
+        run: chmod +x gradlew
+
       - name: Check Java
         run: java --version
 
