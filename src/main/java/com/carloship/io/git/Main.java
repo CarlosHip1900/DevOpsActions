@@ -9,7 +9,7 @@ public class Main {
 
     private static final long TIME = System.currentTimeMillis();
 
-    static void main() {
+    public static void main(String[] args) {
         fromList();
         fromChain();
         fromRecursive();
@@ -54,7 +54,18 @@ public class Main {
         start.thenAccept(_ -> System.out.println("[RECURSIVE] OK Value = " + integer.get()));
     }
 
-    private static CompletableFuture<Void> fromRecursiveNode(CompletableFuture<Void> start, AtomicInteger integer) {
-        return start.thenCompose(v -> CompletableFuture.runAsync(() -> System.out.println("[RECURSIVE] Adding and Get " + integer.getAndIncrement())).thenCompose(_ -> fromRecursiveNode(start, integer)));
+    private static CompletableFuture<Void> fromRecursiveNode(
+            CompletableFuture<Void> start,
+            AtomicInteger integer) {
+
+        return start.thenCompose(v ->
+                CompletableFuture.runAsync(() ->
+                        System.out.println(
+                                "[RECURSIVE] Adding and Get " + integer.getAndIncrement()
+                        )
+                ).thenCompose(_ ->
+                        fromRecursiveNode(start, integer)
+                )
+        );
     }
 }
