@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
 
   build:
@@ -44,17 +48,24 @@ jobs:
       - name: Build application
         run: ./gradlew build
 
-      - name: Build Docker image
-        run: docker build -t devopsactions:latest .
-
-      - name: Save Docker image
-        run: docker save devopsactions:latest -o devopsactions.tar
-
-      - name: Upload Docker image
-        uses: actions/upload-artifact@v4
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          name: devopsactions-docker-image
-          path: devopsactions.tar
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/devopsactions:latest \
+            -t ghcr.io/${{ github.repository_owner }}/devopsactions:${{ github.sha }} \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/devopsactions:latest
+          docker push ghcr.io/${{ github.repository_owner }}/devopsactions:${{ github.sha }}
 
 
   deploy:
@@ -62,16 +73,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Docker image
-        uses: actions/download-artifact@v5
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          name: devopsactions-docker-image
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Load Docker image
-        run: docker load -i devopsactions.tar
+      - name: Pull Docker image
+        run: |
+          docker pull ghcr.io/${{ github.repository_owner }}/devopsactions:latest
 
-      - name: Run container
-        run: docker run --name DevOpsActions devopsactions:latest
+      - name: Run Docker container
+        run: |
+          docker run \
+            --name DevOpsActions \
+            ghcr.io/${{ github.repository_owner }}/devopsactions:latest
 
       - name: Check container
         run: docker ps -a
