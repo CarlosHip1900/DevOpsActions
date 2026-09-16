@@ -8,9 +8,10 @@ on:
 permissions:
   contents: read
   packages: write
+  issues: write
+  pull-requests: write
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
 
@@ -31,11 +32,30 @@ jobs:
         run: java --version
 
       - name: Build
-        run: ./gradlew build
+        run: ./gradlew assemble
 
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '26'
+
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        run: ./gradlew test
 
   deliver:
-    needs: build
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -77,7 +97,6 @@ jobs:
           docker push ghcr.io/$OWNER/devopsactions:latest
           docker push ghcr.io/$OWNER/devopsactions:${{ github.sha }}
 
-
   deploy:
     needs: deliver
     runs-on: ubuntu-latest
@@ -94,9 +113,88 @@ jobs:
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
 
-          docker pull ghcr.io/$OWNER/devopsactions:latest
+          docker pull ghcr.io/$OWNER/devopsactions:${{ github.sha }}
 
       - name: Deploy
         run: |
           echo "Deployment completed successfully."
           echo "Image is available in GitHub Container Registry."
+
+  alert:
+    needs: [build, test, deliver, deploy]
+    if: ${{ always() && (needs.build.result == 'failure' || needs.test.result == 'failure' || needs.deliver.result == 'failure' || needs.deploy.result == 'failure') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Comment failure alert on Pull Request
+        uses: actions/github-script@v7
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          DELIVER_RESULT: ${{ needs.deliver.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const jobs = [
+              ['Build', process.env.BUILD_RESULT],
+              ['Test', process.env.TEST_RESULT],
+              ['Deliver', process.env.DELIVER_RESULT],
+              ['Deploy', process.env.DEPLOY_RESULT],
+            ];
+
+            const failed = jobs
+              .filter(([, result]) => result === 'failure')
+              .map(([name]) => `- ❌ ${name}`)
+              .join('\n');
+
+            const skipped = jobs
+              .filter(([, result]) => result === 'skipped')
+              .map(([name]) => `- ⏭️ ${name} (não executado por dependência)`)
+              .join('\n');
+
+            const body = [
+              '## ❌ Alerta do GitHub Actions',
+              '',
+              'O workflow desta Pull Request apresentou uma falha.',
+              '',
+              '### Etapa(s) com falha',
+              failed,
+              skipped ? `\n### Etapas não executadas\n${skipped}` : '',
+              '',
+              `[Abrir execução do workflow](${process.env.WORKFLOW_URL})`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+  success-comment:
+    needs: [build, test, deliver, deploy]
+    if: ${{ always() && needs.build.result == 'success' && needs.test.result == 'success' && needs.deliver.result == 'success' && needs.deploy.result == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Comment success on Pull Request
+        uses: actions/github-script@v7
+        env:
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: [
+                '## ✅ CI/CD concluído com sucesso',
+                '',
+                'Build, testes, publicação no GHCR e verificação de deploy foram concluídos.',
+                '',
+                `[Abrir execução do workflow](${process.env.WORKFLOW_URL})`,
+              ].join('\n'),
+            });
