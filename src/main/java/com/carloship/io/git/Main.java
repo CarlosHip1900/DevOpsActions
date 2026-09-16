@@ -9,10 +9,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Main {
 
     private static final long TIME = System.currentTimeMillis();
+    private static final int MAX_ATTEMPTS = 15;
 
-    public static void main(String[] args)
-            throws InterruptedException
-    {
+    public static void main(String[] args) throws InterruptedException {
         fromList();
         fromChain();
         fromRecursive();
@@ -20,60 +19,68 @@ public class Main {
         Thread.sleep(Duration.MAX);
     }
 
-    private static void fromChain()
-    {
-        CompletableFuture<Void> start = CompletableFuture.runAsync(() -> System.out.println("[CHAIN] Starting " + TIME));
+    static CompletableFuture<Integer> fromChain() {
+        CompletableFuture<Void> start = CompletableFuture.runAsync(
+                () -> System.out.println("[CHAIN] Starting " + TIME)
+        );
 
         AtomicInteger integer = new AtomicInteger();
 
-        for (int i = 0; i < 15; i++) {
-            start.thenCompose(_ -> CompletableFuture.runAsync(() -> System.out.println("[CHAIN] Adding and Get " + integer.getAndIncrement())));
+        CompletableFuture<Void> result = start;
+
+        for (int i = 0; i < MAX_ATTEMPTS; i++) {
+            result = result.thenCompose(
+                    _ -> CompletableFuture.runAsync(
+                            () -> System.out.println("[CHAIN] Adding and Get " + integer.getAndIncrement())
+                    )
+            );
         }
 
-        start.thenAccept(_ -> System.out.println("[CHAIN] OK Value = " + integer.get()));
+        return result.thenApply(_ -> integer.get());
     }
 
-    private static void fromList()
-    {
+    static CompletableFuture<Integer> fromList() {
         System.out.println("[LIST] Starting " + TIME);
-        List<CompletableFuture<Void>> cls = new ArrayList<>();
+
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         AtomicInteger integer = new AtomicInteger();
 
         for (var anon = new Object() {
             int i = 0;
-        }; anon.i < 15; anon.i++) {
-            cls.add(CompletableFuture.runAsync(() -> System.out.println("[LIST] [" + anon.i + "] Adding and Get " + integer.getAndIncrement())));
+        }; anon.i < MAX_ATTEMPTS; anon.i++) {
+
+            futures.add(
+                    CompletableFuture.runAsync(() -> System.out.println("[LIST] [" + anon.i + "] Adding and Get " + integer.getAndIncrement()))
+            );
         }
 
-        CompletableFuture.allOf(cls.toArray(new CompletableFuture[0])).thenRun(() -> System.out.println("[LIST] OK Value = " + integer.get()));
+        return CompletableFuture
+                .allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApply(_ -> integer.get());
     }
 
-    private static void fromRecursive()
+    static CompletableFuture<Integer> fromRecursive()
     {
         CompletableFuture<Void> start = CompletableFuture.runAsync(() -> System.out.println("[RECURSIVE] Starting " + TIME));
 
         AtomicInteger integer = new AtomicInteger();
 
-        fromRecursiveNode(start, integer, 0);
-
-        start.thenAccept(_ -> System.out.println("[RECURSIVE] OK Value = " + integer.get()));
+        return fromRecursiveNode(start, integer, 0).thenApply(_ -> integer.get());
     }
 
-    private static CompletableFuture<Void> fromRecursiveNode
-            (
-                    CompletableFuture<Void> start,
-                    AtomicInteger integer,
-                    int attempt
-            )
+    static CompletableFuture<Void> fromRecursiveNode(CompletableFuture<Void> start, AtomicInteger integer, int attempt)
     {
-        if (attempt >= 15) {
+        if (attempt >= MAX_ATTEMPTS) {
             return CompletableFuture.completedFuture(null);
         }
 
-        return start.thenCompose(_ ->
-                CompletableFuture.runAsync(() -> System.out.println("[RECURSIVE] Adding and Get " + integer.getAndIncrement()))
-                        .thenCompose(_ -> fromRecursiveNode(start, integer, attempt + 1))
+        return start.thenCompose(
+                _ -> CompletableFuture.runAsync(
+                        () -> System.out.println("[RECURSIVE] Adding and Get " + integer.getAndIncrement())
+                ).thenCompose(
+                        _ -> fromRecursiveNode(start, integer, attempt + 1)
+                )
         );
     }
 }
